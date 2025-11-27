@@ -27,9 +27,9 @@
 // Credentials are in secrets.h
 
 // OTA Ayarları
-const String FIRMWARE_VERSION = "1.4.7";
+const String FIRMWARE_VERSION = "1.4.8";
 const String URL_FW_VERSION   = "https://raw.githubusercontent.com/burakdarende/StartMe/refs/heads/main/version.txt";
-const String URL_FW_BIN       = "https://raw.githubusercontent.com/burakdarende/StartMe/refs/heads/main/firmware.bin";
+const String URL_FW_BIN       = "https://github.com/burakdarende/StartMe/raw/refs/heads/main/startMe/firmware.bin";
 
 bool updateAvailable = false;
 String newVersion = "";
