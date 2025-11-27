@@ -23,6 +23,7 @@
 #include <Update.h>
 #include "secrets.h"
 #include <time.h>
+#include <Preferences.h>
 
 // ================== AYARLAR ==================
 // Credentials are in secrets.h
@@ -42,6 +43,7 @@ String newVersion = "";
 
 WiFiClientSecure client;
 UniversalTelegramBot bot(BOT_TOKEN, client);
+Preferences preferences;
 
 // ------------------ Zaman Fonksiyonları ------------------
 
@@ -73,10 +75,12 @@ const int SERVO_FREQ = 50;      // 50Hz standart servo frekansı
 const int SERVO_RES = 16;       // 16 bit çözünürlük (0-65535)
 
 // Açı ayarları
-// Açı ayarları
 const int ANGLE_IDLE  = 0;
 const int ANGLE_PRESS = 90;
-const int PRESS_DELAY = 500;
+
+// Varsayılan Süreler (Değişken)
+float durationNormal = 0.5; // Saniye
+float durationForce  = 5.0; // Saniye
 
 unsigned long lastCheck = 0;
 const unsigned long CHECK_INTERVAL = 2000;
@@ -128,8 +132,8 @@ void connectWiFi() {
   }
 }
 
-void pressPowerButton(int duration) {
-  Serial.println("Butona basılıyor (" + String(duration) + "ms)...");
+void pressPowerButton(int durationMs) {
+  Serial.println("Butona basılıyor (" + String(durationMs) + "ms)...");
   
   // Nötr konuma git
   moveServo(ANGLE_IDLE);
@@ -137,7 +141,7 @@ void pressPowerButton(int duration) {
 
   // Bas
   moveServo(ANGLE_PRESS);
-  delay(duration);
+  delay(durationMs);
 
   // Geri çek
   moveServo(ANGLE_IDLE);
@@ -228,6 +232,12 @@ void setup() {
   Serial.begin(115200);
   delay(100);
 
+  // Ayarları Yükle
+  preferences.begin("settings", false);
+  durationNormal = preferences.getFloat("norm", 0.5);
+  durationForce  = preferences.getFloat("force", 5.0);
+  preferences.end();
+
   // Başlangıçta servoyu güvene al (GÜVENLİK ÖNLEMİ)
   // Eğer elektrik kesildiğinde basılı kaldıysa, açılışta bırakmasını sağlar.
   moveServo(ANGLE_IDLE);
@@ -245,7 +255,7 @@ void setup() {
     String startupMsg = "🚀 StartMe! Sistem Devrede\n\n";
     startupMsg += "👨‍💻 Dev: BDR\n";
     startupMsg += "📦 Versiyon: v" + FIRMWARE_VERSION + "\n";
-    startupMsg += "� IP: " + WiFi.localIP().toString() + "\n";
+    startupMsg += "📡 IP: " + WiFi.localIP().toString() + "\n";
     startupMsg += "📶 Sinyal: " + String(WiFi.RSSI()) + " dBm\n";
     startupMsg += "📅 Tarih: " + getCurrentTime();
     
@@ -278,32 +288,74 @@ void loop() {
 
         if (text == "/help") {
           String msg = "Komutlar:\n";
-          msg += "/go - PC Aç/Kapa (0.5sn)\n";
-          msg += "/force - Zorla Kapat (5sn)\n";
+          msg += "/go - PC Aç/Kapa (" + String(durationNormal, 1) + "sn)\n";
+          msg += "/force - Zorla Kapat (" + String(durationForce, 1) + "sn)\n";
           msg += "/info - Durum Bilgisi\n";
           msg += "/reboot - Cihazı Resetle\n";
-          msg += "/update - Güncelleme";
+          msg += "/update - Güncelleme\n\n";
+          msg += "Ayarlar:\n";
+          msg += "/set_normal 0.5 (Max 5)\n";
+          msg += "/set_force 5.0 (Max 10)\n";
+          msg += "/reset (Varsayılan)";
           bot.sendMessage(chat_id, msg, "");
         }
         else if (text == "/ping") {
           bot.sendMessage(chat_id, "Buradayım 📡 (v" + FIRMWARE_VERSION + ")", "");
         }
         else if (text == "/go" || text == "/start") {
-          bot.sendMessage(chat_id, "Basılıyor... (0.5sn)", "");
-          pressPowerButton(PRESS_DELAY); // Normal basış
+          bot.sendMessage(chat_id, "Basılıyor... (" + String(durationNormal, 1) + "sn)", "");
+          pressPowerButton((int)(durationNormal * 1000)); 
           bot.sendMessage(chat_id, "Tamam ✅", "");
         }
         else if (text == "/force") {
-          bot.sendMessage(chat_id, "ZORLA kapatılıyor... (5sn)", "");
-          pressPowerButton(5000); // 5 saniye basılı tut
+          bot.sendMessage(chat_id, "ZORLA kapatılıyor... (" + String(durationForce, 1) + "sn)", "");
+          pressPowerButton((int)(durationForce * 1000));
           bot.sendMessage(chat_id, "İşlem Tamam ⚠️", "");
+        }
+        else if (text.startsWith("/set_normal ")) {
+          String valStr = text.substring(12);
+          float val = valStr.toFloat();
+          if (val > 0 && val <= 5.0) {
+            durationNormal = val;
+            preferences.begin("settings", false);
+            preferences.putFloat("norm", durationNormal);
+            preferences.end();
+            bot.sendMessage(chat_id, "Normal süre ayarlandı: " + String(durationNormal, 1) + "sn", "");
+          } else {
+            bot.sendMessage(chat_id, "Hata! 0 ile 5.0 arasında olmalı.", "");
+          }
+        }
+        else if (text.startsWith("/set_force ")) {
+          String valStr = text.substring(11);
+          float val = valStr.toFloat();
+          if (val > 0 && val <= 10.0) {
+            durationForce = val;
+            preferences.begin("settings", false);
+            preferences.putFloat("force", durationForce);
+            preferences.end();
+            bot.sendMessage(chat_id, "Force süre ayarlandı: " + String(durationForce, 1) + "sn", "");
+          } else {
+            bot.sendMessage(chat_id, "Hata! 0 ile 10.0 arasında olmalı.", "");
+          }
+        }
+        else if (text == "/reset") {
+          durationNormal = 0.5;
+          durationForce = 5.0;
+          preferences.begin("settings", false);
+          preferences.putFloat("norm", durationNormal);
+          preferences.putFloat("force", durationForce);
+          preferences.end();
+          bot.sendMessage(chat_id, "Ayarlar varsayılana döndü. ✅", "");
         }
         else if (text == "/info") {
           String msg = "📊 Sistem Durumu:\n";
           msg += "IP: " + WiFi.localIP().toString() + "\n";
           msg += "Sinyal: " + String(WiFi.RSSI()) + " dBm\n";
           msg += "Uptime: " + String(millis() / 60000) + " dk\n";
-          msg += "Versiyon: v" + FIRMWARE_VERSION;
+          msg += "Versiyon: v" + FIRMWARE_VERSION + "\n\n";
+          msg += "⚙️ Ayarlar:\n";
+          msg += "Normal: " + String(durationNormal, 1) + "sn\n";
+          msg += "Force: " + String(durationForce, 1) + "sn";
           bot.sendMessage(chat_id, msg, "");
         }
         else if (text == "/reboot") {
