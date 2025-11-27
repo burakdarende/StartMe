@@ -27,7 +27,7 @@
 // Credentials are in secrets.h
 
 // OTA Ayarları
-const String FIRMWARE_VERSION = "1.4.10";
+const String FIRMWARE_VERSION = "1.4.11";
 const String URL_FW_VERSION   = "https://raw.githubusercontent.com/burakdarende/StartMe/refs/heads/main/version.txt";
 const String URL_FW_BIN       = "https://raw.githubusercontent.com/burakdarende/StartMe/refs/heads/main/startMe/firmware.bin";
 
@@ -46,7 +46,7 @@ const int SERVO_RES = 16;       // 16 bit çözünürlük (0-65535)
 // Açı ayarları
 const int ANGLE_IDLE  = 0;
 const int ANGLE_PRESS = 90;
-const int PRESS_DELAY = 1500;
+const int PRESS_DELAY = 4500;
 
 unsigned long lastCheck = 0;
 const unsigned long CHECK_INTERVAL = 2000;
