@@ -38,7 +38,7 @@ const int SERVO_RES = 16;       // 16 bit çözünürlük (0-65535)
 // Açı ayarları
 // Açı ayarları
 const int ANGLE_IDLE  = 0;
-const int ANGLE_PRESS = 60;
+const int ANGLE_PRESS = 90;
 const int PRESS_DELAY = 500;
 
 unsigned long lastCheck = 0;
