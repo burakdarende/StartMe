@@ -27,7 +27,7 @@
 // Credentials are in secrets.h
 
 // OTA Ayarları
-const String FIRMWARE_VERSION = "1.4.9";
+const String FIRMWARE_VERSION = "1.4.10";
 const String URL_FW_VERSION   = "https://raw.githubusercontent.com/burakdarende/StartMe/refs/heads/main/version.txt";
 const String URL_FW_BIN       = "https://raw.githubusercontent.com/burakdarende/StartMe/refs/heads/main/startMe/firmware.bin";
 
@@ -122,8 +122,11 @@ void pressPowerButton() {
 void checkUpdate(String chat_id) {
   bot.sendMessage(chat_id, "Güncelleme kontrol ediliyor...", "");
   
+  // Cache busting için rastgele sayı ekle
+  String url = URL_FW_VERSION + "?t=" + String(random(1000000));
+  
   HTTPClient http;
-  http.begin(URL_FW_VERSION);
+  http.begin(url);
   int httpCode = http.GET();
   
   if (httpCode == 200) {
@@ -148,8 +151,11 @@ void checkUpdate(String chat_id) {
 void performUpdate(String chat_id) {
   bot.sendMessage(chat_id, "Güncelleme indiriliyor... Lütfen bekleyin.", "");
   
+  // Cache busting için rastgele sayı ekle
+  String url = URL_FW_BIN + "?t=" + String(random(1000000));
+  
   HTTPClient http;
-  http.begin(URL_FW_BIN);
+  http.begin(url);
   int httpCode = http.GET();
   
   if (httpCode == 200) {
