@@ -21,13 +21,10 @@
 #include <UniversalTelegramBot.h>
 #include <HTTPClient.h>
 #include <Update.h>
+#include "secrets.h"
 
 // ================== AYARLAR ==================
-const char* WIFI_SSID     = "bfs";
-const char* WIFI_PASSWORD = "REDACTED_PASS";
-
-#define BOT_TOKEN "REDACTED_TOKEN"
-#define CHAT_ID   "REDACTED_CHATID"
+// Credentials are in secrets.h
 
 // OTA Ayarları
 const String FIRMWARE_VERSION = "1.4.7";
