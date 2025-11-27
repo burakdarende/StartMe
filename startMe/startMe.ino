@@ -22,12 +22,18 @@
 #include <HTTPClient.h>
 #include <Update.h>
 #include "secrets.h"
+#include <time.h>
 
 // ================== AYARLAR ==================
 // Credentials are in secrets.h
 
+// NTP Ayarları
+const char* NTP_SERVER = "pool.ntp.org";
+const long  GMT_OFFSET_SEC = 10800; // UTC+3 (3 * 3600)
+const int   DAYLIGHT_OFFSET_SEC = 0;
+
 // OTA Ayarları
-const String FIRMWARE_VERSION = "1.4.13";
+const String FIRMWARE_VERSION = "1.4.14";
 const String URL_FW_VERSION   = "https://raw.githubusercontent.com/burakdarende/StartMe/refs/heads/main/version.txt";
 const String URL_FW_BIN       = "https://raw.githubusercontent.com/burakdarende/StartMe/refs/heads/main/startMe/firmware.bin";
 
@@ -36,6 +42,30 @@ String newVersion = "";
 
 WiFiClientSecure client;
 UniversalTelegramBot bot(BOT_TOKEN, client);
+
+// ------------------ Zaman Fonksiyonları ------------------
+
+void initTime() {
+  configTime(GMT_OFFSET_SEC, DAYLIGHT_OFFSET_SEC, NTP_SERVER);
+  struct tm timeinfo;
+  // Saatin senkronize olmasını bekle (max 10sn)
+  int retry = 0;
+  while (!getLocalTime(&timeinfo) && retry < 20) {
+    Serial.println("Saat bekleniyor...");
+    delay(500);
+    retry++;
+  }
+}
+
+String getCurrentTime() {
+  struct tm timeinfo;
+  if(!getLocalTime(&timeinfo)){
+    return "Saat Alınamadı";
+  }
+  char timeStringBuff[50];
+  strftime(timeStringBuff, sizeof(timeStringBuff), "%d.%m.%Y\n⏰ Saat: %H:%M:%S", &timeinfo);
+  return String(timeStringBuff);
+}
 
 // ================== SERVO AYARLARI (Manuel PWM) ==================
 const int SERVO_PIN = 13;
@@ -198,16 +228,28 @@ void setup() {
   Serial.begin(115200);
   delay(100);
 
-  // Başlangıçta servoyu güvene al
+  // Başlangıçta servoyu güvene al (GÜVENLİK ÖNLEMİ)
+  // Eğer elektrik kesildiğinde basılı kaldıysa, açılışta bırakmasını sağlar.
   moveServo(ANGLE_IDLE);
   delay(500);
   stopServo();
 
   connectWiFi();
+  
+  // Zamanı başlat
+  initTime();
+  
   client.setInsecure();
 
   if (WiFi.status() == WL_CONNECTED) {
-    bot.sendMessage(CHAT_ID, "ESP32 (v" + FIRMWARE_VERSION + ") Hazır. /go", "");
+    String startupMsg = "🚀 StartMe! Sistem Devrede\n\n";
+    startupMsg += "👨‍💻 Dev: BDR\n";
+    startupMsg += "📦 Versiyon: v" + FIRMWARE_VERSION + "\n";
+    startupMsg += "� IP: " + WiFi.localIP().toString() + "\n";
+    startupMsg += "📶 Sinyal: " + String(WiFi.RSSI()) + " dBm\n";
+    startupMsg += "📅 Tarih: " + getCurrentTime();
+    
+    bot.sendMessage(CHAT_ID, startupMsg, "");
   }
 }
 
