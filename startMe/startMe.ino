@@ -31,8 +31,8 @@ const char* WIFI_PASSWORD = "REDACTED_PASS";
 
 // OTA Ayarları
 const String FIRMWARE_VERSION = "1.4.7";
-const String URL_FW_VERSION   = "https://raw.githubusercontent.com/burakdarende/StartMe/main/version.txt";
-const String URL_FW_BIN       = "https://raw.githubusercontent.com/burakdarende/StartMe/main/firmware.bin";
+const String URL_FW_VERSION   = "https://raw.githubusercontent.com/burakdarende/StartMe/refs/heads/main/version.txt";
+const String URL_FW_BIN       = "https://raw.githubusercontent.com/burakdarende/StartMe/refs/heads/main/firmware.bin";
 
 bool updateAvailable = false;
 String newVersion = "";
