@@ -27,7 +27,7 @@
 // Credentials are in secrets.h
 
 // OTA Ayarları
-const String FIRMWARE_VERSION = "1.4.12";
+const String FIRMWARE_VERSION = "1.4.13";
 const String URL_FW_VERSION   = "https://raw.githubusercontent.com/burakdarende/StartMe/refs/heads/main/version.txt";
 const String URL_FW_BIN       = "https://raw.githubusercontent.com/burakdarende/StartMe/refs/heads/main/startMe/firmware.bin";
 
@@ -98,8 +98,8 @@ void connectWiFi() {
   }
 }
 
-void pressPowerButton() {
-  Serial.println("Butona basılıyor...");
+void pressPowerButton(int duration) {
+  Serial.println("Butona basılıyor (" + String(duration) + "ms)...");
   
   // Nötr konuma git
   moveServo(ANGLE_IDLE);
@@ -107,7 +107,7 @@ void pressPowerButton() {
 
   // Bas
   moveServo(ANGLE_PRESS);
-  delay(PRESS_DELAY);
+  delay(duration);
 
   // Geri çek
   moveServo(ANGLE_IDLE);
@@ -207,7 +207,7 @@ void setup() {
   client.setInsecure();
 
   if (WiFi.status() == WL_CONNECTED) {
-    bot.sendMessage(CHAT_ID, "ESP32 (v" + FIRMWARE_VERSION + ") Hazır. /start", "");
+    bot.sendMessage(CHAT_ID, "ESP32 (v" + FIRMWARE_VERSION + ") Hazır. /go", "");
   }
 }
 
@@ -235,16 +235,39 @@ void loop() {
         if (chat_id != CHAT_ID) continue;
 
         if (text == "/help") {
-          String msg = "Komutlar:\n/start - PC Aç/Kapa\n/ping - Durum\n/update - Güncelleme Kontrol";
+          String msg = "Komutlar:\n";
+          msg += "/go - PC Aç/Kapa (0.5sn)\n";
+          msg += "/force - Zorla Kapat (5sn)\n";
+          msg += "/info - Durum Bilgisi\n";
+          msg += "/reboot - Cihazı Resetle\n";
+          msg += "/update - Güncelleme";
           bot.sendMessage(chat_id, msg, "");
         }
         else if (text == "/ping") {
           bot.sendMessage(chat_id, "Buradayım 📡 (v" + FIRMWARE_VERSION + ")", "");
         }
-        else if (text == "/start") {
-          bot.sendMessage(chat_id, "Basılıyor...", "");
-          pressPowerButton();
+        else if (text == "/go" || text == "/start") {
+          bot.sendMessage(chat_id, "Basılıyor... (0.5sn)", "");
+          pressPowerButton(PRESS_DELAY); // Normal basış
           bot.sendMessage(chat_id, "Tamam ✅", "");
+        }
+        else if (text == "/force") {
+          bot.sendMessage(chat_id, "ZORLA kapatılıyor... (5sn)", "");
+          pressPowerButton(5000); // 5 saniye basılı tut
+          bot.sendMessage(chat_id, "İşlem Tamam ⚠️", "");
+        }
+        else if (text == "/info") {
+          String msg = "📊 Sistem Durumu:\n";
+          msg += "IP: " + WiFi.localIP().toString() + "\n";
+          msg += "Sinyal: " + String(WiFi.RSSI()) + " dBm\n";
+          msg += "Uptime: " + String(millis() / 60000) + " dk\n";
+          msg += "Versiyon: v" + FIRMWARE_VERSION;
+          bot.sendMessage(chat_id, msg, "");
+        }
+        else if (text == "/reboot") {
+          bot.sendMessage(chat_id, "Yeniden başlatılıyor... 🔄", "");
+          delay(1000);
+          ESP.restart();
         }
         else if (text == "/update") {
           checkUpdate(chat_id);
