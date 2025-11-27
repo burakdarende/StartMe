@@ -19,6 +19,8 @@
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <UniversalTelegramBot.h>
+#include <HTTPClient.h>
+#include <Update.h>
 
 // ================== AYARLAR ==================
 const char* WIFI_SSID     = "bfs";
@@ -26,6 +28,14 @@ const char* WIFI_PASSWORD = "REDACTED_PASS";
 
 #define BOT_TOKEN "REDACTED_TOKEN"
 #define CHAT_ID   "REDACTED_CHATID"
+
+// OTA Ayarları
+const String FIRMWARE_VERSION = "1.4.7";
+const String URL_FW_VERSION   = "https://raw.githubusercontent.com/burakdarende/StartMe/main/version.txt";
+const String URL_FW_BIN       = "https://raw.githubusercontent.com/burakdarende/StartMe/main/firmware.bin";
+
+bool updateAvailable = false;
+String newVersion = "";
 
 WiFiClientSecure client;
 UniversalTelegramBot bot(BOT_TOKEN, client);
@@ -110,6 +120,75 @@ void pressPowerButton() {
   stopServo();
 }
 
+// ------------------ OTA Fonksiyonları ------------------
+
+void checkUpdate(String chat_id) {
+  bot.sendMessage(chat_id, "Güncelleme kontrol ediliyor...", "");
+  
+  HTTPClient http;
+  http.begin(URL_FW_VERSION);
+  int httpCode = http.GET();
+  
+  if (httpCode == 200) {
+    String payload = http.getString();
+    payload.trim();
+    
+    if (payload.equals(FIRMWARE_VERSION)) {
+      bot.sendMessage(chat_id, "Sistem güncel. (v" + FIRMWARE_VERSION + ")", "");
+      updateAvailable = false;
+    } else {
+      newVersion = payload;
+      updateAvailable = true;
+      String msg = "Yeni versiyon bulundu: v" + newVersion + "\nŞu anki: v" + FIRMWARE_VERSION + "\nGüncellemek için /yes yazın.";
+      bot.sendMessage(chat_id, msg, "");
+    }
+  } else {
+    bot.sendMessage(chat_id, "Versiyon kontrolü başarısız!", "");
+  }
+  http.end();
+}
+
+void performUpdate(String chat_id) {
+  bot.sendMessage(chat_id, "Güncelleme indiriliyor... Lütfen bekleyin.", "");
+  
+  HTTPClient http;
+  http.begin(URL_FW_BIN);
+  int httpCode = http.GET();
+  
+  if (httpCode == 200) {
+    int contentLength = http.getSize();
+    bool canBegin = Update.begin(contentLength);
+
+    if (canBegin) {
+      WiFiClient *stream = http.getStreamPtr();
+      size_t written = Update.writeStream(*stream);
+
+      if (written == contentLength) {
+        Serial.println("Yazma başarılı.");
+      } else {
+        Serial.println("Yazma başarısız: " + String(written) + "/" + String(contentLength));
+      }
+
+      if (Update.end()) {
+        if (Update.isFinished()) {
+          bot.sendMessage(chat_id, "Güncelleme başarılı! Yeniden başlatılıyor...", "");
+          delay(1000);
+          ESP.restart();
+        } else {
+          bot.sendMessage(chat_id, "Güncelleme tamamlanamadı!", "");
+        }
+      } else {
+        bot.sendMessage(chat_id, "Güncelleme hatası: " + String(Update.getError()), "");
+      }
+    } else {
+      bot.sendMessage(chat_id, "Yetersiz alan!", "");
+    }
+  } else {
+    bot.sendMessage(chat_id, "Dosya indirilemedi!", "");
+  }
+  http.end();
+}
+
 // ------------------ Setup / Loop ------------------
 
 void setup() {
@@ -125,7 +204,7 @@ void setup() {
   client.setInsecure();
 
   if (WiFi.status() == WL_CONNECTED) {
-    bot.sendMessage(CHAT_ID, "ESP32 (v3.0 Core) Hazır. /start", "");
+    bot.sendMessage(CHAT_ID, "ESP32 (v" + FIRMWARE_VERSION + ") Hazır. /start", "");
   }
 }
 
@@ -153,16 +232,23 @@ void loop() {
         if (chat_id != CHAT_ID) continue;
 
         if (text == "/help") {
-          String msg = "Komutlar:\n/start - PC Aç/Kapa\n/ping - Durum";
+          String msg = "Komutlar:\n/start - PC Aç/Kapa\n/ping - Durum\n/update - Güncelleme Kontrol";
           bot.sendMessage(chat_id, msg, "");
         }
         else if (text == "/ping") {
-          bot.sendMessage(chat_id, "Buradayım 📡", "");
+          bot.sendMessage(chat_id, "Buradayım 📡 (v" + FIRMWARE_VERSION + ")", "");
         }
         else if (text == "/start") {
           bot.sendMessage(chat_id, "Basılıyor...", "");
           pressPowerButton();
           bot.sendMessage(chat_id, "Tamam ✅", "");
+        }
+        else if (text == "/update") {
+          checkUpdate(chat_id);
+        }
+        else if (text == "/yes" && updateAvailable) {
+          performUpdate(chat_id);
+          updateAvailable = false; // Reset flag
         }
       }
       numNewMessages = bot.getUpdates(bot.last_message_received + 1);
