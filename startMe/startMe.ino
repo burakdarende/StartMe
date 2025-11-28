@@ -81,33 +81,32 @@ void setLed(int r, int g, int b, LedMode mode) {
 void ledTask(void * parameter) {
   for (;;) {
     if (!ledEnabled || currentLedMode == LED_OFF) {
-      analogWrite(PIN_RED, 0);
-      analogWrite(PIN_GREEN, 0);
-      analogWrite(PIN_BLUE, 0);
+      digitalWrite(PIN_RED, LOW);
+      digitalWrite(PIN_GREEN, LOW);
+      digitalWrite(PIN_BLUE, LOW);
       vTaskDelay(100 / portTICK_PERIOD_MS);
     } 
     else {
-      // Parlaklık hesapla (1-10 arası değeri 0-255 arasına map et)
-      // Min parlaklık 5 olsun ki 1 de bile görünsün
-      int pwmVal = map(ledBrightness, 1, 10, 5, 255);
+      // Parlaklık kontrolü geçici olarak devre dışı (Stabilite için)
+      // Sadece Açık/Kapalı mantığı
       
       if (currentLedMode == LED_SOLID) {
-        analogWrite(PIN_RED, targetR * pwmVal);
-        analogWrite(PIN_GREEN, targetG * pwmVal);
-        analogWrite(PIN_BLUE, targetB * pwmVal);
+        digitalWrite(PIN_RED, targetR > 0 ? HIGH : LOW);
+        digitalWrite(PIN_GREEN, targetG > 0 ? HIGH : LOW);
+        digitalWrite(PIN_BLUE, targetB > 0 ? HIGH : LOW);
         vTaskDelay(100 / portTICK_PERIOD_MS);
       } 
       else if (currentLedMode == LED_BLINK) {
         // Yan
-        analogWrite(PIN_RED, targetR * pwmVal);
-        analogWrite(PIN_GREEN, targetG * pwmVal);
-        analogWrite(PIN_BLUE, targetB * pwmVal);
+        digitalWrite(PIN_RED, targetR > 0 ? HIGH : LOW);
+        digitalWrite(PIN_GREEN, targetG > 0 ? HIGH : LOW);
+        digitalWrite(PIN_BLUE, targetB > 0 ? HIGH : LOW);
         vTaskDelay(BLINK_SPEED / portTICK_PERIOD_MS);
         
         // Sön
-        analogWrite(PIN_RED, 0);
-        analogWrite(PIN_GREEN, 0);
-        analogWrite(PIN_BLUE, 0);
+        digitalWrite(PIN_RED, LOW);
+        digitalWrite(PIN_GREEN, LOW);
+        digitalWrite(PIN_BLUE, LOW);
         vTaskDelay(BLINK_SPEED / portTICK_PERIOD_MS);
       }
     }
@@ -168,8 +167,7 @@ void moveServo(int angle) {
   // Formül: (PulseWidth / 20000) * 65535
   long duty = (pulseWidth * 65535) / 20000;
 
-  // Yeni ESP32 v3.0 API kullanımı:
-  ledcAttach(SERVO_PIN, SERVO_FREQ, SERVO_RES);
+  // ledcAttach setup'ta yapıldı, burada sadece yazıyoruz
   ledcWrite(SERVO_PIN, duty);
 }
 
@@ -206,6 +204,9 @@ void pressPowerButton(int durationMs) {
   setLed(1, 0, 1, LED_BLINK);
   
   Serial.println("Butona basılıyor (" + String(durationMs) + "ms)...");
+  
+  // Servo için tekrar attach gerekebilir (stopServo detach yaptığı için)
+  ledcAttach(SERVO_PIN, SERVO_FREQ, SERVO_RES);
   
   // Nötr konuma git
   moveServo(ANGLE_IDLE);
@@ -320,7 +321,7 @@ void setup() {
   Serial.begin(115200);
   delay(100);
 
-  // LED Pinlerini Ayarla
+  // LED Pinlerini Ayarla (Digital Output)
   pinMode(PIN_RED, OUTPUT);
   pinMode(PIN_GREEN, OUTPUT);
   pinMode(PIN_BLUE, OUTPUT);
@@ -329,12 +330,14 @@ void setup() {
   xTaskCreatePinnedToCore(
     ledTask,   // Fonksiyon
     "LedTask", // İsim
-    1000,      // Stack Size
+    4096,      // Stack Size (Artırıldı)
     NULL,      // Parametre
     1,         // Öncelik
     NULL,      // Task Handle
     0          // Core ID
   );
+
+  Serial.println("LED Task başlatıldı.");
 
   // Başlangıç: Sarı Sabit (R+G)
   setLed(1, 1, 0, LED_SOLID);
@@ -541,6 +544,8 @@ void loop() {
         }
         else if (text == "/reboot") {
           bot.sendMessage(chat_id, "Yeniden başlatılıyor... 🔄", "");
+          // Mesajın gitmesini garantilemek için update offset'i güncelle
+          bot.getUpdates(bot.last_message_received + 1);
           delay(1000);
           ESP.restart();
         }
