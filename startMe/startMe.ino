@@ -25,6 +25,13 @@
 #include <time.h>
 #include <Preferences.h>
 
+// LED Durumları (Prototip hatalarını önlemek için en üstte)
+enum LedMode {
+  LED_OFF,
+  LED_SOLID,
+  LED_BLINK
+};
+
 // ================== AYARLAR ==================
 // Credentials are in secrets.h
 
@@ -34,7 +41,7 @@ const long  GMT_OFFSET_SEC = 10800; // UTC+3 (3 * 3600)
 const int   DAYLIGHT_OFFSET_SEC = 0;
 
 // OTA Ayarları
-const String FIRMWARE_VERSION = "1.4.14";
+const String FIRMWARE_VERSION = "1.4.15";
 const String URL_FW_VERSION   = "https://raw.githubusercontent.com/burakdarende/StartMe/refs/heads/main/version.txt";
 const String URL_FW_BIN       = "https://raw.githubusercontent.com/burakdarende/StartMe/refs/heads/main/startMe/firmware.bin";
 
@@ -44,6 +51,84 @@ String newVersion = "";
 WiFiClientSecure client;
 UniversalTelegramBot bot(BOT_TOKEN, client);
 Preferences preferences;
+
+// ================== RGB LED AYARLARI ==================
+const int PIN_RED   = 5;
+const int PIN_GREEN = 18;
+const int PIN_BLUE  = 19;
+
+int BLINK_SPEED = 100; // Yanıp sönme hızı (ms)
+
+volatile LedMode currentLedMode = LED_OFF;
+volatile int targetR = 0;
+volatile int targetG = 0;
+volatile int targetB = 0;
+
+// LED Ayarları (Değişken)
+int ledBrightness = 10; // 1-10 arası
+bool ledEnabled = true;
+
+// ------------------ LED Fonksiyonları ------------------
+
+void setLed(int r, int g, int b, LedMode mode) {
+  targetR = r;
+  targetG = g;
+  targetB = b;
+  currentLedMode = mode;
+}
+
+// FreeRTOS Task: LED Kontrolü (Arka planda çalışır)
+void ledTask(void * parameter) {
+  for (;;) {
+    if (!ledEnabled || currentLedMode == LED_OFF) {
+      analogWrite(PIN_RED, 0);
+      analogWrite(PIN_GREEN, 0);
+      analogWrite(PIN_BLUE, 0);
+      vTaskDelay(100 / portTICK_PERIOD_MS);
+    } 
+    else {
+      // Parlaklık hesapla (1-10 arası değeri 0-255 arasına map et)
+      // Min parlaklık 5 olsun ki 1 de bile görünsün
+      int pwmVal = map(ledBrightness, 1, 10, 5, 255);
+      
+      if (currentLedMode == LED_SOLID) {
+        analogWrite(PIN_RED, targetR * pwmVal);
+        analogWrite(PIN_GREEN, targetG * pwmVal);
+        analogWrite(PIN_BLUE, targetB * pwmVal);
+        vTaskDelay(100 / portTICK_PERIOD_MS);
+      } 
+      else if (currentLedMode == LED_BLINK) {
+        // Yan
+        analogWrite(PIN_RED, targetR * pwmVal);
+        analogWrite(PIN_GREEN, targetG * pwmVal);
+        analogWrite(PIN_BLUE, targetB * pwmVal);
+        vTaskDelay(BLINK_SPEED / portTICK_PERIOD_MS);
+        
+        // Sön
+        analogWrite(PIN_RED, 0);
+        analogWrite(PIN_GREEN, 0);
+        analogWrite(PIN_BLUE, 0);
+        vTaskDelay(BLINK_SPEED / portTICK_PERIOD_MS);
+      }
+    }
+  }
+}
+
+// ================== SERVO AYARLARI (Manuel PWM) ==================
+const int SERVO_PIN = 13;
+const int SERVO_FREQ = 50;      // 50Hz standart servo frekansı
+const int SERVO_RES = 16;       // 16 bit çözünürlük (0-65535)
+
+// Açı ayarları
+const int ANGLE_IDLE  = 0;
+const int ANGLE_PRESS = 90;
+
+// Varsayılan Süreler (Değişken)
+float durationNormal = 0.5; // Saniye
+float durationForce  = 5.0; // Saniye
+
+unsigned long lastCheck = 0;
+const unsigned long CHECK_INTERVAL = 2000;
 
 // ------------------ Zaman Fonksiyonları ------------------
 
@@ -68,22 +153,6 @@ String getCurrentTime() {
   strftime(timeStringBuff, sizeof(timeStringBuff), "%d.%m.%Y\n⏰ Saat: %H:%M:%S", &timeinfo);
   return String(timeStringBuff);
 }
-
-// ================== SERVO AYARLARI (Manuel PWM) ==================
-const int SERVO_PIN = 13;
-const int SERVO_FREQ = 50;      // 50Hz standart servo frekansı
-const int SERVO_RES = 16;       // 16 bit çözünürlük (0-65535)
-
-// Açı ayarları
-const int ANGLE_IDLE  = 0;
-const int ANGLE_PRESS = 90;
-
-// Varsayılan Süreler (Değişken)
-float durationNormal = 0.5; // Saniye
-float durationForce  = 5.0; // Saniye
-
-unsigned long lastCheck = 0;
-const unsigned long CHECK_INTERVAL = 2000;
 
 // ------------------ Servo Fonksiyonları (Kütüphanesiz) ------------------
 
@@ -133,6 +202,9 @@ void connectWiFi() {
 }
 
 void pressPowerButton(int durationMs) {
+  // Komut alındı: Mor Yanıp Sön
+  setLed(1, 0, 1, LED_BLINK);
+  
   Serial.println("Butona basılıyor (" + String(durationMs) + "ms)...");
   
   // Nötr konuma git
@@ -149,11 +221,17 @@ void pressPowerButton(int durationMs) {
 
   // Gücü kes
   stopServo();
+  
+  // İşlem bitti: Yeşil Sabit
+  setLed(0, 1, 0, LED_SOLID);
 }
 
 // ------------------ OTA Fonksiyonları ------------------
 
 void checkUpdate(String chat_id) {
+  // Kontrol sırasında Mor Blink
+  setLed(1, 0, 1, LED_BLINK);
+  
   bot.sendMessage(chat_id, "Güncelleme kontrol ediliyor...", "");
   
   // Cache busting için rastgele sayı ekle
@@ -180,9 +258,15 @@ void checkUpdate(String chat_id) {
     bot.sendMessage(chat_id, "Versiyon kontrolü başarısız!", "");
   }
   http.end();
+  
+  // Kontrol bitti: Yeşil Sabit
+  setLed(0, 1, 0, LED_SOLID);
 }
 
 void performUpdate(String chat_id) {
+  // Güncelleme Başladı: Kırmızı Blink
+  setLed(1, 0, 0, LED_BLINK);
+  
   bot.sendMessage(chat_id, "Güncelleme indiriliyor... Lütfen bekleyin.", "");
   
   // Cache busting için rastgele sayı ekle
@@ -213,15 +297,19 @@ void performUpdate(String chat_id) {
           ESP.restart();
         } else {
           bot.sendMessage(chat_id, "Güncelleme tamamlanamadı!", "");
+          setLed(0, 1, 0, LED_SOLID); // Hata varsa yeşile dön
         }
       } else {
         bot.sendMessage(chat_id, "Güncelleme hatası: " + String(Update.getError()), "");
+        setLed(0, 1, 0, LED_SOLID);
       }
     } else {
       bot.sendMessage(chat_id, "Yetersiz alan!", "");
+      setLed(0, 1, 0, LED_SOLID);
     }
   } else {
     bot.sendMessage(chat_id, "Dosya indirilemedi!", "");
+    setLed(0, 1, 0, LED_SOLID);
   }
   http.end();
 }
@@ -232,10 +320,31 @@ void setup() {
   Serial.begin(115200);
   delay(100);
 
+  // LED Pinlerini Ayarla
+  pinMode(PIN_RED, OUTPUT);
+  pinMode(PIN_GREEN, OUTPUT);
+  pinMode(PIN_BLUE, OUTPUT);
+  
+  // LED Task Başlat (Core 0)
+  xTaskCreatePinnedToCore(
+    ledTask,   // Fonksiyon
+    "LedTask", // İsim
+    1000,      // Stack Size
+    NULL,      // Parametre
+    1,         // Öncelik
+    NULL,      // Task Handle
+    0          // Core ID
+  );
+
+  // Başlangıç: Sarı Sabit (R+G)
+  setLed(1, 1, 0, LED_SOLID);
+
   // Ayarları Yükle
   preferences.begin("settings", false);
   durationNormal = preferences.getFloat("norm", 0.5);
   durationForce  = preferences.getFloat("force", 5.0);
+  ledBrightness  = preferences.getInt("led_bright", 10);
+  ledEnabled     = preferences.getBool("led_on", true);
   preferences.end();
 
   // Başlangıçta servoyu güvene al (GÜVENLİK ÖNLEMİ)
@@ -252,6 +361,9 @@ void setup() {
   client.setInsecure();
 
   if (WiFi.status() == WL_CONNECTED) {
+    // Hazır: Yeşil Sabit
+    setLed(0, 1, 0, LED_SOLID);
+    
     String startupMsg = "🚀 StartMe! Sistem Devrede\n\n";
     startupMsg += "👨‍💻 Dev: BDR\n";
     startupMsg += "📦 Versiyon: v" + FIRMWARE_VERSION + "\n";
@@ -287,17 +399,30 @@ void loop() {
         if (chat_id != CHAT_ID) continue;
 
         if (text == "/help") {
-          String msg = "Komutlar:\n";
+          String msg = "🤖 *StartMe! Komut Listesi* 🤖\n\n";
+          
+          msg += "🔌 *Güç Kontrolü:*\n";
           msg += "/go - PC Aç/Kapa (" + String(durationNormal, 1) + "sn)\n";
-          msg += "/force - Zorla Kapat (" + String(durationForce, 1) + "sn)\n";
-          msg += "/info - Durum Bilgisi\n";
-          msg += "/reboot - Cihazı Resetle\n";
-          msg += "/update - Güncelleme\n\n";
-          msg += "Ayarlar:\n";
-          msg += "/set_normal 0.5 (Max 5)\n";
-          msg += "/set_force 5.0 (Max 10)\n";
-          msg += "/reset (Varsayılan)";
-          bot.sendMessage(chat_id, msg, "");
+          msg += "/force - Zorla Kapat (" + String(durationForce, 1) + "sn)\n\n";
+          
+          msg += "⚙️ *Süre Ayarları:*\n";
+          msg += "/set_normal [sn] - Normal basma süresi (0.1-5.0)\n";
+          msg += "/set_force [sn] - Uzun basma süresi (0.1-10.0)\n";
+          msg += "/resetTiming - Süreleri varsayılana döndür\n\n";
+          
+          msg += "💡 *LED Ayarları:*\n";
+          msg += "/set_brightness [1-10] - LED parlaklığı\n";
+          msg += "/led_on - LED'leri aç\n";
+          msg += "/led_off - LED'leri kapat\n";
+          msg += "/resetLed - LED ayarlarını varsayılana döndür\n\n";
+          
+          msg += "🛠 *Sistem:*\n";
+          msg += "/info - Sistem durumu ve ayarlar\n";
+          msg += "/reboot - Cihazı yeniden başlat\n";
+          msg += "/update - Yazılım güncelleme\n";
+          msg += "/resetAll - TÜM ayarları sıfırla";
+          
+          bot.sendMessage(chat_id, msg, "Markdown");
         }
         else if (text == "/ping") {
           bot.sendMessage(chat_id, "Buradayım 📡 (v" + FIRMWARE_VERSION + ")", "");
@@ -338,16 +463,68 @@ void loop() {
             bot.sendMessage(chat_id, "Hata! 0 ile 10.0 arasında olmalı.", "");
           }
         }
-        else if (text == "/reset") {
+        else if (text.startsWith("/set_brightness ")) {
+          String valStr = text.substring(16);
+          int val = valStr.toInt();
+          if (val >= 1 && val <= 10) {
+            ledBrightness = val;
+            preferences.begin("settings", false);
+            preferences.putInt("led_bright", ledBrightness);
+            preferences.end();
+            bot.sendMessage(chat_id, "LED Parlaklığı: " + String(ledBrightness), "");
+          } else {
+            bot.sendMessage(chat_id, "Hata! 1 ile 10 arasında olmalı.", "");
+          }
+        }
+        else if (text == "/led_on") {
+          ledEnabled = true;
+          preferences.begin("settings", false);
+          preferences.putBool("led_on", ledEnabled);
+          preferences.end();
+          bot.sendMessage(chat_id, "LED Açıldı 💡", "");
+        }
+        else if (text == "/led_off") {
+          ledEnabled = false;
+          preferences.begin("settings", false);
+          preferences.putBool("led_on", ledEnabled);
+          preferences.end();
+          bot.sendMessage(chat_id, "LED Kapatıldı 🌑", "");
+        }
+        else if (text == "/resetTiming") {
           durationNormal = 0.5;
           durationForce = 5.0;
           preferences.begin("settings", false);
           preferences.putFloat("norm", durationNormal);
           preferences.putFloat("force", durationForce);
           preferences.end();
-          bot.sendMessage(chat_id, "Ayarlar varsayılana döndü. ✅", "");
+          bot.sendMessage(chat_id, "Süre ayarları varsayılana döndü. ⏱️", "");
+        }
+        else if (text == "/resetLed") {
+          ledBrightness = 10;
+          ledEnabled = true;
+          preferences.begin("settings", false);
+          preferences.putInt("led_bright", ledBrightness);
+          preferences.putBool("led_on", ledEnabled);
+          preferences.end();
+          bot.sendMessage(chat_id, "LED ayarları varsayılana döndü. 💡", "");
+        }
+        else if (text == "/resetAll") {
+          durationNormal = 0.5;
+          durationForce = 5.0;
+          ledBrightness = 10;
+          ledEnabled = true;
+          preferences.begin("settings", false);
+          preferences.putFloat("norm", durationNormal);
+          preferences.putFloat("force", durationForce);
+          preferences.putInt("led_bright", ledBrightness);
+          preferences.putBool("led_on", ledEnabled);
+          preferences.end();
+          bot.sendMessage(chat_id, "TÜM ayarlar varsayılana döndü. ♻️", "");
         }
         else if (text == "/info") {
+          // Bilgi verilirken Mor Blink
+          setLed(1, 0, 1, LED_BLINK);
+          
           String msg = "📊 Sistem Durumu:\n";
           msg += "IP: " + WiFi.localIP().toString() + "\n";
           msg += "Sinyal: " + String(WiFi.RSSI()) + " dBm\n";
@@ -355,8 +532,12 @@ void loop() {
           msg += "Versiyon: v" + FIRMWARE_VERSION + "\n\n";
           msg += "⚙️ Ayarlar:\n";
           msg += "Normal: " + String(durationNormal, 1) + "sn\n";
-          msg += "Force: " + String(durationForce, 1) + "sn";
+          msg += "Force: " + String(durationForce, 1) + "sn\n";
+          msg += "LED: " + String(ledEnabled ? "Açık" : "Kapalı") + " (Lv" + String(ledBrightness) + ")";
           bot.sendMessage(chat_id, msg, "");
+          
+          // İşlem bitti: Yeşil Sabit
+          setLed(0, 1, 0, LED_SOLID);
         }
         else if (text == "/reboot") {
           bot.sendMessage(chat_id, "Yeniden başlatılıyor... 🔄", "");
