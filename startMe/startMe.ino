@@ -41,7 +41,7 @@ const long  GMT_OFFSET_SEC = 10800; // UTC+3 (3 * 3600)
 const int   DAYLIGHT_OFFSET_SEC = 0;
 
 // OTA Ayarları
-const String FIRMWARE_VERSION = "1.4.16";
+const String FIRMWARE_VERSION = "1.4.17";
 const String URL_FW_VERSION   = "https://raw.githubusercontent.com/burakdarende/StartMe/refs/heads/main/version.txt";
 const String URL_FW_BIN       = "https://raw.githubusercontent.com/burakdarende/StartMe/refs/heads/main/startMe/firmware.bin";
 
@@ -54,8 +54,8 @@ Preferences preferences;
 
 // ================== RGB LED AYARLARI ==================
 const int PIN_RED   = 5;
-const int PIN_GREEN = 18;
-const int PIN_BLUE  = 19;
+const int PIN_GREEN = 19; // 18 idi, 19 yapıldı (Renk düzeltmesi)
+const int PIN_BLUE  = 18; // 19 idi, 18 yapıldı (Renk düzeltmesi)
 
 int BLINK_SPEED = 100; // Yanıp sönme hızı (ms)
 
@@ -67,6 +67,7 @@ volatile int targetB = 0;
 // LED Ayarları (Değişken)
 int ledBrightness = 10; // 1-10 arası
 bool ledEnabled = true;
+bool isCommonAnode = true; // EĞER LED TERS ÇALIŞIYORSA BUNU TRUE YAPIN
 
 // ------------------ LED Fonksiyonları ------------------
 
@@ -77,36 +78,43 @@ void setLed(int r, int g, int b, LedMode mode) {
   currentLedMode = mode;
 }
 
+// Yardımcı fonksiyon: PWM değerini donanıma göre ayarlar
+void writeLed(int r, int g, int b) {
+  if (isCommonAnode) {
+    // Ortak Anot: 255 = Sönük, 0 = Tam Parlak
+    ledcWrite(PIN_RED,   255 - r);
+    ledcWrite(PIN_GREEN, 255 - g);
+    ledcWrite(PIN_BLUE,  255 - b);
+  } else {
+    // Ortak Katot: 0 = Sönük, 255 = Tam Parlak
+    ledcWrite(PIN_RED,   r);
+    ledcWrite(PIN_GREEN, g);
+    ledcWrite(PIN_BLUE,  b);
+  }
+}
+
 // FreeRTOS Task: LED Kontrolü (Arka planda çalışır)
 void ledTask(void * parameter) {
   for (;;) {
     if (!ledEnabled || currentLedMode == LED_OFF) {
-      digitalWrite(PIN_RED, LOW);
-      digitalWrite(PIN_GREEN, LOW);
-      digitalWrite(PIN_BLUE, LOW);
+      writeLed(0, 0, 0);
       vTaskDelay(100 / portTICK_PERIOD_MS);
     } 
     else {
-      // Parlaklık kontrolü geçici olarak devre dışı (Stabilite için)
-      // Sadece Açık/Kapalı mantığı
+      // Parlaklık hesapla (1-10 arası değeri 0-255 arasına map et)
+      int pwmVal = map(ledBrightness, 1, 10, 5, 255);
       
       if (currentLedMode == LED_SOLID) {
-        digitalWrite(PIN_RED, targetR > 0 ? HIGH : LOW);
-        digitalWrite(PIN_GREEN, targetG > 0 ? HIGH : LOW);
-        digitalWrite(PIN_BLUE, targetB > 0 ? HIGH : LOW);
+        writeLed(targetR * pwmVal, targetG * pwmVal, targetB * pwmVal);
         vTaskDelay(100 / portTICK_PERIOD_MS);
       } 
       else if (currentLedMode == LED_BLINK) {
         // Yan
-        digitalWrite(PIN_RED, targetR > 0 ? HIGH : LOW);
-        digitalWrite(PIN_GREEN, targetG > 0 ? HIGH : LOW);
-        digitalWrite(PIN_BLUE, targetB > 0 ? HIGH : LOW);
+        writeLed(targetR * pwmVal, targetG * pwmVal, targetB * pwmVal);
         vTaskDelay(BLINK_SPEED / portTICK_PERIOD_MS);
         
         // Sön
-        digitalWrite(PIN_RED, LOW);
-        digitalWrite(PIN_GREEN, LOW);
-        digitalWrite(PIN_BLUE, LOW);
+        writeLed(0, 0, 0);
         vTaskDelay(BLINK_SPEED / portTICK_PERIOD_MS);
       }
     }
@@ -321,10 +329,10 @@ void setup() {
   Serial.begin(115200);
   delay(100);
 
-  // LED Pinlerini Ayarla (Digital Output)
-  pinMode(PIN_RED, OUTPUT);
-  pinMode(PIN_GREEN, OUTPUT);
-  pinMode(PIN_BLUE, OUTPUT);
+  // LED Pinlerini Ayarla (PWM için Attach)
+  ledcAttach(PIN_RED, 5000, 8);
+  ledcAttach(PIN_GREEN, 5000, 8);
+  ledcAttach(PIN_BLUE, 5000, 8);
   
   // LED Task Başlat (Core 0)
   xTaskCreatePinnedToCore(
