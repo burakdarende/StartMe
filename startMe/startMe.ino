@@ -41,7 +41,7 @@ const long  GMT_OFFSET_SEC = 10800; // UTC+3 (3 * 3600)
 const int   DAYLIGHT_OFFSET_SEC = 0;
 
 // OTA Ayarları
-const String FIRMWARE_VERSION = "1.4.17";
+const String FIRMWARE_VERSION = "1.4.18";
 const String URL_FW_VERSION   = "https://raw.githubusercontent.com/burakdarende/StartMe/refs/heads/main/version.txt";
 const String URL_FW_BIN       = "https://raw.githubusercontent.com/burakdarende/StartMe/refs/heads/main/startMe/firmware.bin";
 
@@ -53,9 +53,9 @@ UniversalTelegramBot bot(BOT_TOKEN, client);
 Preferences preferences;
 
 // ================== RGB LED AYARLARI ==================
-const int PIN_RED   = 5;
-const int PIN_GREEN = 19; // 18 idi, 19 yapıldı (Renk düzeltmesi)
-const int PIN_BLUE  = 18; // 19 idi, 18 yapıldı (Renk düzeltmesi)
+const int PIN_RED   = 19; // 5 idi, 19 yapıldı (Test sonucu: GPIO 19 = Kırmızı)
+const int PIN_GREEN = 5;  // 19 idi, 5 yapıldı (Geriye kalan: GPIO 5 = Yeşil)
+const int PIN_BLUE  = 18; // 18 (Test sonucu: GPIO 18 = Mavi)
 
 int BLINK_SPEED = 100; // Yanıp sönme hızı (ms)
 
