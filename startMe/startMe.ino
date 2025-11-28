@@ -41,7 +41,7 @@ const long  GMT_OFFSET_SEC = 10800; // UTC+3 (3 * 3600)
 const int   DAYLIGHT_OFFSET_SEC = 0;
 
 // OTA Ayarları
-const String FIRMWARE_VERSION = "1.4.15";
+const String FIRMWARE_VERSION = "1.4.16";
 const String URL_FW_VERSION   = "https://raw.githubusercontent.com/burakdarende/StartMe/refs/heads/main/version.txt";
 const String URL_FW_BIN       = "https://raw.githubusercontent.com/burakdarende/StartMe/refs/heads/main/startMe/firmware.bin";
 
@@ -402,25 +402,25 @@ void loop() {
           String msg = "🤖 *StartMe! Komut Listesi* 🤖\n\n";
           
           msg += "🔌 *Güç Kontrolü:*\n";
-          msg += "/go - PC Aç/Kapa (" + String(durationNormal, 1) + "sn)\n";
-          msg += "/force - Zorla Kapat (" + String(durationForce, 1) + "sn)\n\n";
+          msg += "`/go` - PC Aç/Kapa (" + String(durationNormal, 1) + "sn)\n";
+          msg += "`/force` - Zorla Kapat (" + String(durationForce, 1) + "sn)\n\n";
           
           msg += "⚙️ *Süre Ayarları:*\n";
-          msg += "/set_normal [sn] - Normal basma süresi (0.1-5.0)\n";
-          msg += "/set_force [sn] - Uzun basma süresi (0.1-10.0)\n";
-          msg += "/resetTiming - Süreleri varsayılana döndür\n\n";
+          msg += "`/set_normal` [sn] - Normal basma süresi (0.1-5.0)\n";
+          msg += "`/set_force` [sn] - Uzun basma süresi (0.1-10.0)\n";
+          msg += "`/resetTiming` - Süreleri varsayılana döndür\n\n";
           
           msg += "💡 *LED Ayarları:*\n";
-          msg += "/set_brightness [1-10] - LED parlaklığı\n";
-          msg += "/led_on - LED'leri aç\n";
-          msg += "/led_off - LED'leri kapat\n";
-          msg += "/resetLed - LED ayarlarını varsayılana döndür\n\n";
+          msg += "`/set_brightness` [1-10] - LED parlaklığı\n";
+          msg += "`/led_on` - LED'leri aç\n";
+          msg += "`/led_off` - LED'leri kapat\n";
+          msg += "`/resetLed` - LED ayarlarını varsayılana döndür\n\n";
           
           msg += "🛠 *Sistem:*\n";
-          msg += "/info - Sistem durumu ve ayarlar\n";
-          msg += "/reboot - Cihazı yeniden başlat\n";
-          msg += "/update - Yazılım güncelleme\n";
-          msg += "/resetAll - TÜM ayarları sıfırla";
+          msg += "`/info` - Sistem durumu ve ayarlar\n";
+          msg += "`/reboot` - Cihazı yeniden başlat\n";
+          msg += "`/update` - Yazılım güncelleme\n";
+          msg += "`/resetAll` - TÜM ayarları sıfırla";
           
           bot.sendMessage(chat_id, msg, "Markdown");
         }
